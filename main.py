@@ -1,6 +1,6 @@
 """
 main.py - 自助式数据分析（数据分析智能体）
-streamlit run main.py
+
 """
 import json
 import matplotlib.pyplot as plt
@@ -159,46 +159,62 @@ with st.sidebar:
     
     # 大模型选择
     st.markdown('<div style="margin-top: 1.5rem;"><h3 style="color: #495057;">🤖 选择AI模型</h3></div>', unsafe_allow_html=True)
-    model_option = st.selectbox(
-        "请选择要使用的大模型:",
-        (
-            "DeepSeek (推荐)",
-            "GPT-4o", 
-            "GPT-4o-mini",
-            "Claude-3.5-Sonnet",
-            "文心一言 4.0",
-            "通义千问 Max"
-        ),
+    
+    # 选择服务提供商
+    api_vendor = st.radio(
+        label='请选择服务提供商：', 
+        options=['DeepSeek', 'OpenAI', 'qwen3'],
+        horizontal=True,
+        help="不同服务提供商提供不同的AI模型"
+    )
+    
+    # 根据服务提供商选择模型
+    if api_vendor == 'OpenAI':
+        base_url = 'https://twapi.openai-hk.com/v1'
+        model_options = ['gpt-4o-mini', 'gpt-3.5-turbo', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
+        provider = 'openai'
+    elif api_vendor == 'DeepSeek':
+        base_url = 'https://api.deepseek.com'
+        model_options = ['deepseek-chat', 'deepseek-reasoner']
+        provider = 'deepseek'
+    elif api_vendor == 'qwen3':
+        base_url = 'https://dashscope.aliyuncs.com'
+        model_options = ['qwen-max', 'qwen-plus', 'qwen-turbo']
+        provider = 'qwen'
+    
+    # 选择具体模型
+    selected_model_name = st.selectbox(
+        "请选择具体模型:",
+        model_options,
         help="不同模型在分析能力和响应速度上有所差异"
     )
-
-    # 将模型选择存储到session state
-    model_mapping = {
-        "DeepSeek (推荐)": {"provider": "deepseek", "model": "deepseek-reasoner", "base_url": "https://api.deepseek.com/"},
-        "GPT-4o": {"provider": "openai", "model": "gpt-4o", "base_url": "https://api.openai.com/v1"},
-        "GPT-4o-mini": {"provider": "openai", "model": "gpt-4o-mini", "base_url": "https://api.openai.com/v1"},
-        "Claude-3.5-Sonnet": {"provider": "anthropic", "model": "claude-3-5-sonnet-20241022", "base_url": "https://api.anthropic.com"},
-        "文心一言 4.0": {"provider": "baidu", "model": "ernie-4.0-8k", "base_url": "https://aip.baidubce.com"},
-        "通义千问 Max": {"provider": "alibaba", "model": "qwen-max", "base_url": "https://dashscope.aliyuncs.com"}
+    
+    # 构建模型配置
+    model_config = {
+        "provider": provider,
+        "model": selected_model_name,
+        "base_url": base_url
     }
-    st.session_state["selected_model"] = model_mapping[model_option]
+    st.session_state["selected_model"] = model_config
+    
+    # 显示当前选择
+    st.info(f"🎯 当前选择: {api_vendor} - {selected_model_name}")
     
     # API密钥输入
     st.markdown('<div style="margin-top: 1.5rem;"><h3 style="color: #495057;">🔑 API密钥配置</h3></div>', unsafe_allow_html=True)
-    api_key_placeholder = {
-        "DeepSeek (推荐)": "请输入DeepSeek API密钥",
-        "GPT-4o": "请输入OpenAI API密钥",
-        "GPT-4o-mini": "请输入OpenAI API密钥",
-        "Claude-3.5-Sonnet": "请输入Anthropic API密钥",
-        "文心一言 4.0": "请输入百度API密钥",
-        "通义千问 Max": "请输入阿里云API密钥"
+    
+    # 根据服务提供商设置API密钥占位符
+    api_key_placeholders = {
+        "DeepSeek": "请输入DeepSeek API密钥",
+        "OpenAI": "请输入OpenAI API密钥",
+        "qwen3": "请输入阿里云API密钥"
     }
     
     api_key = st.text_input(
         "API密钥:",
         type="password",
-        placeholder=api_key_placeholder[model_option],
-        help="请输入您选择模型对应的API密钥，密钥将安全存储在当前会话中"
+        placeholder=api_key_placeholders[api_vendor],
+        help="请输入您选择服务提供商对应的API密钥，密钥将安全存储在当前会话中"
     )
 
     # 将API密钥存储到session state并进行基本验证
@@ -207,18 +223,18 @@ with st.sidebar:
         api_key_valid = True
         validation_msg = ""
         
-        if model_option == "DeepSeek (推荐)":
+        if api_vendor == "DeepSeek":
             if not api_key.startswith("sk-") or len(api_key) < 20:
                 api_key_valid = False
                 validation_msg = "DeepSeek API密钥格式不正确，应以'sk-'开头"
-        elif model_option in ["GPT-4o", "GPT-4o-mini"]:
-            if not api_key.startswith("sk-") or len(api_key) < 20:
+        elif api_vendor == "OpenAI":
+            if not (api_key.startswith("sk-") or api_key.startswith("hk-")) or len(api_key) < 20:
                 api_key_valid = False
-                validation_msg = "OpenAI API密钥格式不正确，应以'sk-'开头"
-        elif model_option == "Claude-3.5-Sonnet":
-            if not api_key.startswith("sk-ant-") or len(api_key) < 20:
+                validation_msg = "OpenAI API密钥格式不正确，应以'sk-'或'hk-'开头"
+        elif api_vendor == "qwen3":
+            if len(api_key) < 10:
                 api_key_valid = False
-                validation_msg = "Anthropic API密钥格式不正确，应以'sk-ant-'开头"
+                validation_msg = "阿里云API密钥格式不正确，请检查"
         
         if api_key_valid:
              st.session_state["api_key"] = api_key
@@ -554,6 +570,52 @@ with st.sidebar:
             except Exception as e:
                 st.error(f"❌ 读取文件失败: {e}")
 
+    # 侧边栏现在只保留配置相关内容
+    
+    # 处理重新执行的查询
+    if 'rerun_query' in st.session_state:
+        default_query = st.session_state['rerun_query']
+        del st.session_state['rerun_query']
+    else:
+        default_query = ""
+    
+    # 分析查询输入
+    query = st.text_area(
+        "🔍 请描述你想要进行的数据分析:", 
+        value=default_query,
+        placeholder="例如：分析销售数据的趋势，找出最佳销售区域，预测未来销量等...",
+        height=120,
+        help="详细描述你的分析需求，AI将为你提供专业的数据洞察"
+    )
+    
+    # 显示当前选择的模型
+    if "selected_model" in st.session_state:
+        model_info = st.session_state["selected_model"]
+        st.info(f"🤖 当前使用模型: {model_info.get('provider', 'unknown')} - {model_info.get('model', 'unknown')}")
+    
+    # 检查是否有API密钥
+    has_api_key = "api_key" in st.session_state and st.session_state["api_key"]
+    
+    button = st.button(
+        "🚀 生成回答", 
+        type="primary",
+        disabled=not has_api_key or "df" not in st.session_state
+    )
+
+# 主内容区域 - 使用两列布局
+col_main, col_sidebar = st.columns([2, 1])
+
+with col_main:
+    # 数据预览区域
+    if "df" in st.session_state:
+        st.markdown('<div class="info-card"><h3 style="color: #495057; margin: 0;">📊 数据预览</h3><p style="color: #6c757d; margin: 0.5rem 0 0 0;">您上传的数据概览</p></div>', unsafe_allow_html=True)
+        st.dataframe(st.session_state["df"], use_container_width=True)
+
+    if "selected_model" in st.session_state:
+        st.markdown('<div class="info-card"><h3 style="color: #495057; margin: 0;">🤖 AI分析结果</h3><p style="color: #6c757d; margin: 0.5rem 0 0 0;">基于您的问题生成的智能分析</p></div>', unsafe_allow_html=True)
+
+    # 数据存储与历史记录 - 保留在主栏
+    st.markdown('<div style="margin-top: 2rem;"><hr style="border: none; height: 2px; background: linear-gradient(90deg, #667eea, #764ba2); margin: 2rem 0;"></div>', unsafe_allow_html=True)
     # 历史记录管理
     st.markdown('<div style="margin-top: 1.5rem;"><h3 style="color: #495057;">📚 数据存储与历史记录</h3></div>', unsafe_allow_html=True)
     
@@ -574,35 +636,31 @@ with st.sidebar:
             
             # 显示历史记录
             for i, record in enumerate(history_records):
-                with st.expander(f"🕐 {record['timestamp']} - {record['query'][:50]}...", expanded=False):
-                    col1, col2 = st.columns([2, 1])
+                with st.expander(f"🕐 {record['timestamp']} - {record['query'][:30]}...", expanded=False):
+                    st.write(f"**📝 查询内容:** {record['query']}")
+                    st.write(f"**🤖 使用模型:** {record['model_used']}")
                     
-                    with col1:
-                        st.write(f"**📝 查询内容:** {record['query']}")
-                        st.write(f"**🤖 使用模型:** {record['model_used']}")
-                        
-                        if record['result_text']:
-                            st.write("**📊 分析结果:**")
-                            st.info(record['result_text'][:500] + "..." if len(record['result_text']) > 500 else record['result_text'])
+                    if record['result_text']:
+                        st.write("**📊 分析结果:**")
+                        st.info(record['result_text'][:300] + "..." if len(record['result_text']) > 300 else record['result_text'])
                     
-                    with col2:
-                        st.write(f"**📅 时间:** {record['timestamp']}")
+                    st.write(f"**📅 时间:** {record['timestamp']}")
+                    
+                    # 显示图表信息
+                    charts = record.get('charts_info', {})
+                    if charts:
+                        chart_types = []
+                        if charts.get('bar'): chart_types.append('📊柱状图')
+                        if charts.get('line'): chart_types.append('📈折线图')
+                        if charts.get('table'): chart_types.append('📋表格')
                         
-                        # 显示图表信息
-                        charts = record.get('charts_info', {})
-                        if charts:
-                            chart_types = []
-                            if charts.get('bar'): chart_types.append('📊柱状图')
-                            if charts.get('line'): chart_types.append('📈折线图')
-                            if charts.get('table'): chart_types.append('📋表格')
-                            
-                            if chart_types:
-                                st.write(f"**📈 生成图表:** {', '.join(chart_types)}")
-                        
-                        # 重新执行按钮
-                        if st.button(f"🔄 重新执行", key=f"rerun_{record['id']}"):
-                            st.session_state['rerun_query'] = record['query']
-                            st.rerun()
+                        if chart_types:
+                            st.write(f"**📈 生成图表:** {', '.join(chart_types)}")
+                    
+                    # 重新执行按钮
+                    if st.button(f"🔄 重新执行", key=f"rerun_{record['id']}"):
+                        st.session_state['rerun_query'] = record['query']
+                        st.rerun()
         else:
             st.info("📝 暂无分析历史记录")
     
@@ -612,19 +670,10 @@ with st.sidebar:
         stats = get_history_statistics()
         
         # 显示统计信息
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("📊 总记录数", stats['total_records'])
-        
-        with col2:
-            st.metric("🔗 总会话数", stats['total_sessions'])
-        
-        with col3:
-            st.metric("🤖 常用模型", stats['most_used_model'])
-        
-        with col4:
-            st.metric("📅 近7天记录", stats['recent_records'])
+        st.metric("📊 总记录数", stats['total_records'])
+        st.metric("🔗 总会话数", stats['total_sessions'])
+        st.metric("🤖 常用模型", stats['most_used_model'])
+        st.metric("📅 近7天记录", stats['recent_records'])
         
         # 显示详细统计图表
         if stats['total_records'] > 0:
@@ -637,7 +686,7 @@ with st.sidebar:
                 dates = [record['timestamp'][:10] for record in history_records]
                 date_counts = pd.Series(dates).value_counts().sort_index()
                 
-                st.line_chart(date_counts, height=300)
+                st.line_chart(date_counts, height=200)
     
     elif history_option == "清理历史记录":
         from utils import delete_analysis_history
@@ -661,17 +710,19 @@ with st.sidebar:
                 st.success("✅ 历史记录清理完成")
             else:
                 st.error("❌ 清理失败，请重试")
-    
+
+with col_sidebar:
+    # AI数据分析板块
     st.markdown('<div style="margin-top: 1.5rem;"><h3 style="color: #495057;">💬 AI数据分析</h3></div>', unsafe_allow_html=True)
     st.markdown('<p style="color: #6c757d; margin-bottom: 1rem;">🤖 智能数据分析助手</p>', unsafe_allow_html=True)
-    
+
     # 分析模式选择
     analysis_mode = st.radio(
         "🎯 选择分析模式:",
         ("标准数据分析", "混合格式文件分析"),
         help="标准分析：分析已上传的结构化数据；混合格式分析：智能处理多种格式的混合数据"
     )
-    
+
     if analysis_mode == "混合格式文件分析":
         st.info("🔍 混合格式文件分析：支持同时分析文本、数值、日期等多种数据类型")
         
@@ -681,12 +732,12 @@ with st.sidebar:
             type=["xlsx", "xls", "xlsm", "xlsb", "xltx", "xltm", "csv", "txt", "json"],
             accept_multiple_files=True,
             help="支持Excel、CSV、TXT、JSON等多种格式文件\n支持的Excel格式：.xlsx, .xls, .xlsm, .xlsb, .xltx, .xltm",
-            key="mixed_files"
+            key="mixed_files_main"
         )
-        
+    
         if mixed_files:
             # 分析混合格式数据
-            if st.button("🔍 开始混合格式分析", type="primary"):
+            if st.button("🔍 开始混合格式分析", type="primary", key="mixed_analysis_main"):
                 try:
                     from utils import analyze_mixed_format_data
                     
@@ -700,18 +751,13 @@ with st.sidebar:
                             with st.expander("📊 数据格式分析报告", expanded=True):
                                 for file_name, file_analysis in analysis_result.items():
                                     st.write(f"**📄 {file_name}**")
-                                    
-                                    col1, col2 = st.columns(2)
-                                    with col1:
-                                        st.write(f"- 文件类型: {file_analysis['file_type']}")
-                                        st.write(f"- 数据行数: {file_analysis['rows']}")
-                                        st.write(f"- 数据列数: {file_analysis['columns']}")
-                                    
-                                    with col2:
-                                        st.write(f"- 数值列: {file_analysis['numeric_columns']}")
-                                        st.write(f"- 文本列: {file_analysis['text_columns']}")
-                                        st.write(f"- 日期列: {file_analysis['date_columns']}")
-                                    
+                                    st.write(f"- 文件类型: {file_analysis['file_type']}")
+                                    st.write(f"- 数据行数: {file_analysis['rows']}")
+                                    st.write(f"- 数据列数: {file_analysis['columns']}")
+                                    st.write(f"- 数值列: {file_analysis['numeric_columns']}")
+                                    st.write(f"- 文本列: {file_analysis['text_columns']}")
+                                    st.write(f"- 日期列: {file_analysis['date_columns']}")
+                                        
                                     if 'data_preview' in file_analysis:
                                         st.write("**数据预览:**")
                                         st.dataframe(file_analysis['data_preview'])
@@ -743,43 +789,6 @@ with st.sidebar:
                             
                 except Exception as e:
                     st.error(f"❌ 分析过程中出错: {e}")
-    
-    # 处理重新执行的查询
-    if 'rerun_query' in st.session_state:
-        default_query = st.session_state['rerun_query']
-        del st.session_state['rerun_query']
-    else:
-        default_query = ""
-    
-    # 分析查询输入
-    query = st.text_area(
-        "🔍 请描述你想要进行的数据分析:", 
-        value=default_query,
-        placeholder="例如：分析销售数据的趋势，找出最佳销售区域，预测未来销量等...",
-        height=120,
-        help="详细描述你的分析需求，AI将为你提供专业的数据洞察"
-    )
-    
-    # 显示当前选择的模型
-    if "selected_model" in st.session_state:
-        st.info(f"🤖 当前使用模型: {model_option}")
-    
-    # 检查是否有API密钥
-    has_api_key = "api_key" in st.session_state and st.session_state["api_key"]
-    
-    button = st.button(
-        "🚀 生成回答", 
-        type="primary",
-        disabled=not has_api_key or "df" not in st.session_state
-    )
-
-# 主内容区域显示分析结果
-if "df" in st.session_state:
-    st.markdown('<div class="info-card"><h3 style="color: #495057; margin: 0;">📊 数据预览</h3><p style="color: #6c757d; margin: 0.5rem 0 0 0;">您上传的数据概览</p></div>', unsafe_allow_html=True)
-    st.dataframe(st.session_state["df"], use_container_width=True)
-
-if "selected_model" in st.session_state:
-    st.markdown('<div class="info-card"><h3 style="color: #495057; margin: 0;">🤖 AI分析结果</h3><p style="color: #6c757d; margin: 0.5rem 0 0 0;">基于您的问题生成的智能分析</p></div>', unsafe_allow_html=True)
 
 # 主内容区域处理分析请求
 if button and not data:
@@ -793,7 +802,7 @@ if button and not has_api_key:
 if query and button:
     with st.spinner("🤖 AI正在思考中，请稍等..."):
         # 传递选中的模型信息和API密钥
-        selected_model = st.session_state.get("selected_model", model_mapping["DeepSeek (推荐)"])
+        selected_model = st.session_state.get("selected_model", {"provider": "deepseek", "model": "deepseek-reasoner", "base_url": "https://api.deepseek.com"})
         api_key = st.session_state.get("api_key")
         result = dataframe_agent(st.session_state["df"], query, selected_model, api_key)
         
@@ -843,9 +852,9 @@ if query and button:
             # 保存历史记录
             save_analysis_history(
                 query=query,
-                result_text=result_text,
                 model_used=selected_model.get('model', 'unknown'),
-                charts_info=charts_info
+                data_info={'columns': len(st.session_state["df"].columns), 'rows': len(st.session_state["df"])},
+                result={'answer': result_text, 'bar': charts_info.get('bar', False), 'line': charts_info.get('line', False), 'table': charts_info.get('table', False)}
             )
             
             st.info("💾 分析结果已保存到历史记录")
@@ -855,7 +864,7 @@ if query and button:
 # 页脚
 st.markdown("""
 <div style="margin-top: 3rem; padding: 2rem; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); border-radius: 15px; text-align: center;">
-    <h4 style="color: white; margin: 0;">🚀 千锋数据分析智能体</h4>
+    <h4 style="color: white; margin: 0;">🚀 数据分析智能体</h4>
     <p style="color: #e9ecef; margin: 0.5rem 0 0 0;">让数据分析变得简单高效 | Powered by AI</p>
     <div style="margin-top: 1rem; color: #ced4da; font-size: 0.9rem;">
         <span>📧 支持: support@qianfeng.com</span> | 
